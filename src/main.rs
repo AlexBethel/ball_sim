@@ -1,81 +1,105 @@
-mod world;
+use std::ffi::CString;
 
-use std::time::Duration;
-
-use sdl2::{
-    event::Event,
-    keyboard::Keycode,
-    pixels::Color,
-    rect::Point,
-    render::{Canvas, RenderTarget},
-};
-use world::World;
+mod render_gl;
 
 fn main() {
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
+    let sdl = sdl2::init().unwrap();
+    let video_subsystem = sdl.video().unwrap();
+    let gl_attr = video_subsystem.gl_attr();
+    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+    gl_attr.set_context_version(4, 5);
 
     let window = video_subsystem
-        .window("Hello World!", 800, 600)
-        .position_centered()
+        .window("Simulator", 800, 600)
+        .opengl()
+        .resizable()
         .build()
         .unwrap();
 
-    let mut canvas = window.into_canvas().build().unwrap();
+    let _gl_context = window.gl_create_context().unwrap();
+    gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as _);
 
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
-    canvas.clear();
-    canvas.present();
+    unsafe {
+        gl::Viewport(0, 0, 800, 600);
+        gl::ClearColor(0.3, 0.3, 0.5, 1.0);
+    }
 
-    let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut i = 0;
-    let mut world = World::new();
+    let vert_shader =
+        render_gl::Shader::from_vert_source(&CString::new(include_str!("triangle.vert")).unwrap())
+            .unwrap();
+    let frag_shader =
+        render_gl::Shader::from_frag_source(&CString::new(include_str!("triangle.frag")).unwrap())
+            .unwrap();
+
+    let shader_program = render_gl::Program::from_shaders(&[vert_shader, frag_shader]).unwrap();
+    shader_program.set_used();
+
+    let vertices: Vec<f32> = vec![
+        -0.5, -0.5, 0.0, // vertex
+        0.5, -0.5, 0.0, // vertex
+        0.0, 0.5, 0.0, // vertex
+    ];
+    let mut vbo: gl::types::GLuint = 0;
+    unsafe {
+        gl::GenBuffers(1, &mut vbo);
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (vertices.len() * std::mem::size_of::<f32>()) as _,
+            vertices.as_ptr() as _,
+            gl::STATIC_DRAW,
+        );
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    }
+
+    let mut vao = 0;
+    unsafe {
+        gl::GenVertexArrays(1, &mut vao);
+        gl::BindVertexArray(vao);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        gl::EnableVertexAttribArray(0); // layout (location = 0)
+        gl::VertexAttribPointer(
+            // index of generic vertex attribute
+            0,
+            // number of components per generic vertex attr
+            3,
+            // data type
+            gl::FLOAT,
+            // normalized?
+            gl::FALSE,
+            // stride (between consecutive attrs)
+            (3 * std::mem::size_of::<f32>()) as _,
+            // offset of the first component
+            std::ptr::null(),
+        );
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        gl::BindVertexArray(0);
+    }
+
+    let mut event_pump = sdl.event_pump().unwrap();
     loop {
-        i = (i + 1) % 255;
-        canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
-        canvas.clear();
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => {
-                    return;
-                }
+                sdl2::event::Event::Quit { .. } => return,
                 _ => {}
             }
         }
 
-        world.tick();
-        world.draw(&mut canvas);
-
-        // draw_circle(
-        //     &mut canvas,
-        //     Color::RGB(255, 0, 0),
-        //     Point::new(100, 100),
-        //     20.0,
-        // );
-
-        canvas.present();
-        std::thread::sleep(Duration::from_millis(50));
-    }
-}
-
-fn draw_circle<T>(canvas: &mut Canvas<T>, color: Color, center: Point, radius: f64)
-where
-    T: RenderTarget,
-{
-    let radius_i = radius.ceil() as i32;
-    let mut pts = Vec::new();
-    for dy in (-radius_i)..radius_i {
-        for dx in (-radius_i)..radius_i {
-            if dy * dy + dx * dx < (radius * radius) as i32 {
-                pts.push(Point::new(center.x() + dx, center.y() + dy));
-            }
+        shader_program.set_used();
+        unsafe {
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+            gl::BindVertexArray(vao);
+            gl::DrawArrays(
+                gl::TRIANGLES,
+                // starting index in enabled arrays
+                0,
+                // number of indices to be rendered
+                3,
+            )
         }
-    }
 
-    canvas.set_draw_color(color);
-    canvas.draw_points(&pts[..]).unwrap();
+        window.gl_swap_window();
+    }
 }
