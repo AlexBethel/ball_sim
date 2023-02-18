@@ -36,8 +36,11 @@ fn main() {
 
     let vertices: Vec<f32> = vec![
         -0.5, -0.5, 0.0, // vertex
+        1.0, 0.0, 0.0, // color
         0.5, -0.5, 0.0, // vertex
+        0.0, 1.0, 0.0, // color
         0.0, 0.5, 0.0, // vertex
+        0.0, 0.0, 1.0, // color
     ];
     let mut vbo: gl::types::GLuint = 0;
     unsafe {
@@ -69,9 +72,24 @@ fn main() {
             // normalized?
             gl::FALSE,
             // stride (between consecutive attrs)
-            (3 * std::mem::size_of::<f32>()) as _,
+            (6 * std::mem::size_of::<f32>()) as _,
             // offset of the first component
             std::ptr::null(),
+        );
+        gl::EnableVertexAttribArray(1); // layout (location = 0)
+        gl::VertexAttribPointer(
+            // index of generic vertex attribute
+            1,
+            // number of components per generic vertex attr
+            3,
+            // data type
+            gl::FLOAT,
+            // normalized?
+            gl::FALSE,
+            // stride (between consecutive attrs)
+            (6 * std::mem::size_of::<f32>()) as _,
+            // offset of the first component
+            (3 * std::mem::size_of::<f32>()) as _,
         );
 
         gl::BindBuffer(gl::ARRAY_BUFFER, 0);
