@@ -1,4 +1,4 @@
-use std::ffi::{CStr, CString};
+use std::{ffi::CStr, os::raw::c_char};
 
 pub struct Program {
     id: gl::types::GLuint,
@@ -15,16 +15,15 @@ impl Program {
 
             gl::LinkProgram(program_id);
 
-            let mut success = 1;
-            gl::GetProgramiv(program_id, gl::LINK_STATUS, &mut success);
+            let success =
+                from_mutator(|success| gl::GetProgramiv(program_id, gl::LINK_STATUS, success));
             if success == 0 {
-                let mut len = 0;
-                gl::GetProgramiv(program_id, gl::INFO_LOG_LENGTH, &mut len);
-
-                let error = cstring_with_len(len as usize);
-                gl::GetProgramInfoLog(program_id, len, std::ptr::null_mut(), error.as_ptr() as _);
-
-                return Err(error.to_string_lossy().into_owned());
+                let len =
+                    from_mutator(|len| gl::GetProgramiv(program_id, gl::INFO_LOG_LENGTH, len));
+                let error = from_foreign_writer(len as _, |ptr| {
+                    gl::GetProgramInfoLog(program_id, len, std::ptr::null_mut(), ptr)
+                });
+                return Err(error);
             }
 
             for shader in shaders {
@@ -62,20 +61,11 @@ impl Shader {
             let mut success: gl::types::GLint = 1;
             gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut success);
             if success == 0 {
-                let mut len: gl::types::GLint = 0;
-                gl::GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len);
-
-                let error = cstring_with_len(len as usize);
-
-                gl::GetShaderInfoLog(
-                    id,
-                    len,
-                    std::ptr::null_mut(),
-                    // TODO: this is UB
-                    error.as_ptr() as *mut gl::types::GLchar,
-                );
-
-                return Err(error.to_string_lossy().into_owned());
+                let len = from_mutator(|len| gl::GetShaderiv(id, gl::INFO_LOG_LENGTH, len));
+                let error = from_foreign_writer(len as _, |ptr| {
+                    gl::GetShaderInfoLog(id, len, std::ptr::null_mut(), ptr)
+                });
+                return Err(error);
             }
 
             Ok(Self { id })
@@ -101,8 +91,16 @@ impl Drop for Shader {
     }
 }
 
-fn cstring_with_len(len: usize) -> CString {
-    let mut buffer: Vec<u8> = Vec::with_capacity(len + 1);
-    buffer.extend([b' '].iter().cycle().take(len));
-    unsafe { CString::from_vec_unchecked(buffer) }
+fn from_mutator<T: Default>(func: impl FnOnce(&mut T)) -> T {
+    let mut rv = T::default();
+    func(&mut rv);
+    rv
+}
+
+unsafe fn from_foreign_writer(len: usize, func: impl FnOnce(*mut c_char)) -> String {
+    let mut buf = Vec::<c_char>::with_capacity(len + 1);
+    buf.extend([0].iter().cycle().take(len + 1));
+    func(buf.as_mut_ptr());
+
+    CStr::from_ptr(buf.as_ptr()).to_str().unwrap().to_owned()
 }
