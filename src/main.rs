@@ -148,7 +148,7 @@ fn main() {
                 // starting index in enabled arrays
                 0,
                 // number of indices to be rendered
-                8,
+                6,
             )
         }
 
