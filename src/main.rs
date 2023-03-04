@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::{ffi::CString, time::Instant};
 
 mod render_gl;
 
@@ -20,7 +20,7 @@ fn main() {
     gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as _);
 
     unsafe {
-        gl::Viewport(0, 0, 800, 600);
+        gl::Viewport(0, 0, 100, 100);
         gl::ClearColor(0.3, 0.3, 0.5, 1.0);
     }
 
@@ -35,11 +35,18 @@ fn main() {
     shader_program.set_used();
 
     let vertices: Vec<f32> = vec![
-        -0.5, -0.5, 0.0, // vertex
+        0.0, 0.0, 0.0, // vertex
         1.0, 0.0, 0.0, // color
-        0.5, -0.5, 0.0, // vertex
+        0.0, 1.0, 0.0, // vertex
         0.0, 1.0, 0.0, // color
-        0.0, 0.5, 0.0, // vertex
+        1.0, 0.0, 0.0, // vertex
+        0.0, 0.0, 1.0, // color
+
+        1.0, 1.0, 0.0, // vertex
+        1.0, 0.0, 0.0, // color
+        1.0, 0.0, 0.0, // vertex
+        0.0, 1.0, 0.0, // color
+        0.0, 1.0, 0.0, // vertex
         0.0, 0.0, 1.0, // color
     ];
     let mut vbo: gl::types::GLuint = 0;
@@ -98,6 +105,8 @@ fn main() {
 
     let mut event_pump = sdl.event_pump().unwrap();
     loop {
+        let start = Instant::now();
+
         for event in event_pump.poll_iter() {
             match event {
                 sdl2::event::Event::Quit { .. } => return,
@@ -114,10 +123,15 @@ fn main() {
                 // starting index in enabled arrays
                 0,
                 // number of indices to be rendered
-                3,
+                6,
             )
         }
 
         window.gl_swap_window();
+
+        // let duration = Instant::now() - start;
+        let duration = start.elapsed();
+        let fps = 1. / duration.as_secs_f64();
+        println!("fps = {fps}");
     }
 }
